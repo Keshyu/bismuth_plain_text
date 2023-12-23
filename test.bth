@@ -1,0 +1,106 @@
+a -> b; b -> c
+a -> b; (a -> b) -> c
+
+main :: [args: cli.Arg.Iter] -> Errory {
+    args nth(1) context("file name not provided")?; ~file_name
+    File.read?;                                     ~source
+    lex?;                                           ~tokens
+    parse?;                                         ~expression
+    fmt_pretty println
+}
+
+parse :: [source: Arr(Token)] -> Expression.Errory {
+	index := 0
+    ancestry: Vec(Vec(Expression)) := Vec(Vec.empty)
+
+    // expr:  expr2 (S expr)
+    // expr2: expr1 expr2
+    // expr1: expr0 (J expr1)
+    // expr0: NAME | NAME_EX | START expr END
+
+    while let Some(token) = self.next {
+        match token {
+            Name(n) Expression.Name(n.clone)
+            NameExtended(n) Expression.Name(n.clone)
+            GroupStart { ancestry.push(Vec.empty); continue }
+            GroupEnd {
+                if (ancestry.len < 2) bail!("unmatched '\}'")
+                Expression.Group(ancestry.pop.unwrap.into)
+            }
+            Separator {
+                while matches!(self.next, Some(Separator | Joiner)) {}
+                self.go_back
+
+                let e = Expression::Group(ancestry.pop.unwrap.into)
+
+                if (ancestry.last == None) ancestry.push(Vec::new)
+
+                ancestry.last_mut.unwrap.push(e)
+                ancestry.push(Vec::new)
+
+                continue
+            }
+            Joiner {
+                let Some(e) = ancestry.last_mut.unwrap.pop else { continue }
+                ancestry.push(vec![e])
+                continue
+            }
+        }
+        ancestry.last_mut.unwrap.push
+    }
+
+    if (ancestry.len > 1) bail!("unmatched '\{' (one or more)")
+    assume(ancestry.len == 1)
+
+    Group(ancestry.pop.unwrap.into)
+
+	___
+
+    next :: [=self] -> &Token.OrNot {
+        it := self.source.at(self.index)
+        =self.index + 1
+        it
+    }
+
+    go_back :: [=self] { =self.index - 1 }
+}
+
+Expression :: enum {
+    Group :: Arr(Expression)
+    Name :: Str
+}
+Expression derive(DebugPls)
+
+lex :: [source: Arr(Char)] -> Arr(Token).Errory {
+	recompose [rest] --
+	consume,return; match --
+    whitespace? Unfinished
+	'{' Token.GroupStart
+    '}' Token.GroupEnd
+    '.' Token.Joiner
+    ';' Token.Separator
+    '\n' Token.Separator
+    '"' Token.NameExtended({
+		consume until: '"'
+		consume 1
+		but Error("unterminated extended name") if: EndedPrematurely
+    })
+    else: Token.Name({
+		consume until: (one_of('{' '}' '.' ';') | whitespace?)
+    })
+}
+
+Token :: enum {
+    group-start
+    group-end
+    joiner
+    separator
+    name :: Str
+    name-extended :: Str
+}
+Token derive(DebugPls)
+
+use anyhow.(bail Context)
+use dbg_pls.pretty as fmt_pretty
+use dbg_pls.DebugPls
+use std.File
