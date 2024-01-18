@@ -8,3 +8,8 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.75"
 dbg-pls = { version = "0.4.3", features = ["pretty", "colors", "derive"] }
+tree-sitter = "0.20.10"
+tree-sitter-bismuth = { git = "https://github.com/Keshyu/tree-sitter-bismuth.git", version = "0.0.1" }
+
+[build-dependencies]
+cc = "1.0.83"
